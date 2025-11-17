@@ -33,12 +33,13 @@ def check_checkmarx_api() -> List[Dict[str, Any]]:
     # Simulate API delay
     time.sleep(2)
     
-    # Mock vulnerability data (simplified)
+    # Mock vulnerability data with repositories
     vulnerabilities = [
         {
             "id": "CX-SQL-001",
             "type": "SQL Injection",
             "severity": "High",
+            "repository": "backend-api",
             "file": "/api/users.py",
             "line": 45,
             "description": "User input is not properly sanitized before being used in SQL query"
@@ -47,6 +48,7 @@ def check_checkmarx_api() -> List[Dict[str, Any]]:
             "id": "CX-XSS-002", 
             "type": "Cross-Site Scripting (XSS)",
             "severity": "Medium",
+            "repository": "frontend-app",
             "file": "/frontend/components/UserProfile.tsx",
             "line": 78,
             "description": "User-controlled data is rendered without proper encoding"
@@ -55,6 +57,7 @@ def check_checkmarx_api() -> List[Dict[str, Any]]:
             "id": "CX-PATH-003",
             "type": "Path Traversal",
             "severity": "High",
+            "repository": "backend-api",
             "file": "/api/files.py",
             "line": 23,
             "description": "File path constructed from user input without validation"
@@ -69,14 +72,22 @@ def check_checkmarx_api() -> List[Dict[str, Any]]:
 def create_orchestrator_session(vulnerabilities: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Create the main orchestrator Devin session."""
     
-    vulnerability_summary = "\n".join([
-        f"- {v['id']}: {v['type']} ({v['severity']})"
-        for v in vulnerabilities
-    ])
+    # Group vulnerabilities by repository
+    repos = {}
+    for v in vulnerabilities:
+        repo = v.get('repository', 'unknown')
+        if repo not in repos:
+            repos[repo] = []
+        repos[repo].append(v)
+    
+    vulnerability_summary = ""
+    for repo, vulns in repos.items():
+        vulnerability_summary += f"\n**Repository: {repo}**\n"
+        for v in vulns:
+            vulnerability_summary += f"  - {v['id']}: {v['type']} ({v['severity']})\n"
     
     prompt = f"""
-    Orchestrate vulnerability remediation for these issues:
-    
+    Orchestrate vulnerability remediation across multiple repositories:
     {vulnerability_summary}
     
     Track progress with this structured output:
@@ -105,9 +116,12 @@ def create_orchestrator_session(vulnerabilities: List[Dict[str, Any]]) -> Dict[s
 def create_vulnerability_fix_session(vulnerability: Dict[str, Any]) -> Dict[str, Any]:
     """Create a Devin session to fix a specific vulnerability."""
     
+    repository = vulnerability.get('repository', 'unknown')
+    
     prompt = f"""
     Fix this security vulnerability:
     
+    **Repository**: {repository}
     **ID**: {vulnerability['id']}
     **Type**: {vulnerability['type']} 
     **Severity**: {vulnerability['severity']}
@@ -118,6 +132,7 @@ def create_vulnerability_fix_session(vulnerability: Dict[str, Any]) -> Dict[str,
     
     Update this structured output:
     {{
+      "repository": "{repository}",
       "vulnerability_id": "{vulnerability['id']}",
       "status": "fixing",
       "fixed": false
